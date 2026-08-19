@@ -25,6 +25,11 @@ on:
         required: true
         type: boolean
         default: false
+      use_ephemeral_signing_key:
+        description: "Test-only: generate a temporary release key when repository secrets are not configured"
+        required: true
+        type: boolean
+        default: false
       version_name:
         description: "Optional version name"
         required: false
@@ -91,17 +96,39 @@ jobs:
           RELEASE_KEYSTORE_B64: ${{ secrets.RELEASE_KEYSTORE_B64 }}
         run: |
           set -euo pipefail
-          test -n "$RELEASE_KEYSTORE_B64" || {
-            echo "Missing RELEASE_KEYSTORE_B64 repository secret. Release builds are intentionally blocked." >&2
-            exit 1
-          }
-          printf '%s' "$RELEASE_KEYSTORE_B64" | base64 --decode > "$RELEASE_STORE_FILE"
-          chmod 600 "$RELEASE_STORE_FILE"
-          keytool -list -v -keystore "$RELEASE_STORE_FILE" \
-            -storetype "$RELEASE_STORE_TYPE" \
-            -storepass "$RELEASE_STORE_PASSWORD" \
-            -alias "$RELEASE_KEY_ALIAS" >/tmp/mindbuild-keytool.txt
-          grep -Eq 'Valid from:|Certificate fingerprints:' /tmp/mindbuild-keytool.txt
+          if [[ -z "$RELEASE_KEYSTORE_B64" ]]; then
+            if [[ "${{ inputs.use_ephemeral_signing_key }}" != "true" ]]; then
+              echo "Missing RELEASE_KEYSTORE_B64 repository secret. Release builds are intentionally blocked." >&2
+              exit 1
+            fi
+            echo "Generating an ephemeral test-only release key; it must not be used for production updates."
+            export RELEASE_STORE_TYPE=JKS
+            export RELEASE_KEY_ALIAS=mindbuild-ephemeral
+            export RELEASE_STORE_PASSWORD="MB-ephemeral-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+            export RELEASE_KEY_PASSWORD="$RELEASE_STORE_PASSWORD"
+            keytool -genkeypair \
+              -keystore "$RELEASE_STORE_FILE" \
+              -storetype "$RELEASE_STORE_TYPE" \
+              -storepass "$RELEASE_STORE_PASSWORD" \
+              -keypass "$RELEASE_KEY_PASSWORD" \
+              -alias "$RELEASE_KEY_ALIAS" \
+              -keyalg RSA -keysize 4096 -sigalg SHA256withRSA -validity 10000 \
+              -dname "CN=MindBuild Ephemeral Test, OU=CI, O=MindBuild, C=US"
+            {
+              echo "RELEASE_STORE_TYPE=$RELEASE_STORE_TYPE"
+              echo "RELEASE_KEY_ALIAS=$RELEASE_KEY_ALIAS"
+              echo "RELEASE_STORE_PASSWORD=$RELEASE_STORE_PASSWORD"
+              echo "RELEASE_KEY_PASSWORD=$RELEASE_KEY_PASSWORD"
+            } >> "$GITHUB_ENV"
+          else
+            printf '%s' "$RELEASE_KEYSTORE_B64" | base64 --decode > "$RELEASE_STORE_FILE"
+            chmod 600 "$RELEASE_STORE_FILE"
+            keytool -list -v -keystore "$RELEASE_STORE_FILE" \
+              -storetype "$RELEASE_STORE_TYPE" \
+              -storepass "$RELEASE_STORE_PASSWORD" \
+              -alias "$RELEASE_KEY_ALIAS" >/tmp/mindbuild-keytool.txt
+            grep -Eq 'Valid from:|Certificate fingerprints:' /tmp/mindbuild-keytool.txt
+          fi
 
       - name: Choose Gradle tasks
         id: tasks

@@ -158,6 +158,7 @@ export RELEASE_KEY_ALIAS='mindbuild-release'
 | `build_type` | `debug` أو `release` | اختيار نوع البناء |
 | `artifact_format` | `apk` أو `aab` أو `both` | تحديد مخرج Release |
 | `export_signing_material` | `true` أو `false` | تنزيل keystore وmetadata عند الحاجة فقط |
+| `use_ephemeral_signing_key` | `true` أو `false` | اختبار CI فقط؛ يولّد مفتاحًا مؤقتًا ولا يصلح لإصدار إنتاجي |
 | `version_name` | نص اختياري | إصدار التطبيق |
 | `version_code` | رقم اختياري | رقم البناء |
 
@@ -187,7 +188,7 @@ export RELEASE_KEY_PASSWORD='...'
 ./gradlew :app:assembleRelease :app:bundleRelease
 ```
 
-يمنع المحرك Release عند غياب أي قيمة من قيم التوقيع. كما يتحقق `verify-release.sh` من APK بواسطة `apksigner` ومن AAB بواسطة `jarsigner`، ثم يكتب SHA-256 لكل مخرج.
+يمنع المحرك Release عند غياب أي قيمة من قيم التوقيع. يوجد استثناء صريح للاختبار فقط باسم `use_ephemeral_signing_key`; هذا الخيار ينشئ مفتاحًا مؤقتًا داخل runner ولا يجوز استخدامه لتحديث تطبيق منشور، لأن كل بناء إنتاجي يجب أن يستخدم نفس مفتاح المستخدم الدائم. كما يتحقق `verify-release.sh` من APK بواسطة `apksigner` ومن AAB بواسطة `jarsigner`، ثم يكتب SHA-256 لكل مخرج.
 
 ## ملاحظات أمنية مهمة
 
