@@ -22,6 +22,26 @@ class GitHubActionsClient(
         body: String? = null,
         expected: Set<Int> = setOf(200, 201, 202, 204)
     ): ByteArray {
+        var lastError: IllegalStateException? = null
+        for (attempt in 0 until 3) {
+            try {
+                return requestOnce(method, path, body, expected)
+            } catch (error: IllegalStateException) {
+                lastError = error
+                val retryable = error.message?.contains(Regex("\\((429|500|502|503|504)\\)")) == true
+                if (!retryable || attempt == 2) throw error
+                Thread.sleep(1_000L shl attempt)
+            }
+        }
+        throw lastError ?: IllegalStateException("GitHub request failed")
+    }
+
+    private fun requestOnce(
+        method: String,
+        path: String,
+        body: String? = null,
+        expected: Set<Int> = setOf(200, 201, 202, 204)
+    ): ByteArray {
         val connection = (URL(apiBaseUrl + path).openConnection() as HttpURLConnection).apply {
             requestMethod = method
             connectTimeout = 30_000
@@ -48,6 +68,84 @@ class GitHubActionsClient(
         return response
     }
 
+    /**
+     * Uploads the whole editor snapshot as one atomic commit.
+     * This is preferred for AIDE-like projects because it avoids one commit per file.
+     */
+    fun uploadProjectSnapshotAtomic(snapshot: ProjectSnapshot, owner: String, repository: String, branch: String): String {
+        val encodedBranch = URLEncoder.encode(branch, "UTF-8").replace("+", "%20")
+        val ref = JSONObject(String(
+            request("GET", "/repos/$owner/$repository/git/ref/heads/$encodedBranch"),
+            StandardCharsets.UTF_8
+        ))
+        val baseSha = ref.getJSONObject("object").getString("sha")
+        val baseCommit = JSONObject(String(
+            request("GET", "/repos/$owner/$repository/git/commits/$baseSha"),
+            StandardCharsets.UTF_8
+        ))
+        val tree = JSONArray()
+
+        snapshot.files.forEach { file ->
+            val blob = JSONObject(String(
+                request(
+                    "POST",
+                    "/repos/$owner/$repository/git/blobs",
+                    JSONObject()
+                        .put("content", Base64.encodeToString(file.bytes, Base64.NO_WRAP))
+                        .put("encoding", "base64")
+                        .toString(),
+                    expected = setOf(201)
+                ),
+                StandardCharsets.UTF_8
+            ))
+            tree.put(
+                JSONObject()
+                    .put("path", file.path.trimStart('/'))
+                    .put("mode", "100644")
+                    .put("type", "blob")
+                    .put("sha", blob.getString("sha"))
+            )
+        }
+
+        val newTree = JSONObject(String(
+            request(
+                "POST",
+                "/repos/$owner/$repository/git/trees",
+                JSONObject()
+                    .put("base_tree", baseCommit.getJSONObject("tree").getString("sha"))
+                    .put("tree", tree)
+                    .toString(),
+                expected = setOf(201)
+            ),
+            StandardCharsets.UTF_8
+        )).getString("sha")
+
+        val newCommit = JSONObject(String(
+            request(
+                "POST",
+                "/repos/$owner/$repository/git/commits",
+                JSONObject()
+                    .put("message", snapshot.commitMessage)
+                    .put("tree", newTree)
+                    .put("parents", JSONArray().put(baseSha))
+                    .toString(),
+                expected = setOf(201)
+            ),
+            StandardCharsets.UTF_8
+        )).getString("sha")
+
+        request(
+            "PATCH",
+            "/repos/$owner/$repository/git/refs/heads/$encodedBranch",
+            JSONObject().put("sha", newCommit).put("force", false).toString(),
+            expected = setOf(200)
+        )
+        return newCommit
+    }
+
+    /**
+     * Compatibility fallback for small projects. Prefer uploadProjectSnapshotAtomic.
+     */
     fun uploadProjectSnapshot(snapshot: ProjectSnapshot, owner: String, repository: String, branch: String) {
         val encodedBranch = URLEncoder.encode(branch, "UTF-8")
         snapshot.files.forEach { file ->
@@ -110,13 +208,27 @@ class GitHubActionsClient(
             .put("version_name", request.versionName ?: "")
             .put("version_code", request.versionCode?.toString() ?: "")
         val body = JSONObject().put("ref", request.branch).put("inputs", inputs)
-        request("POST", "/repos/${request.owner}/${request.repository}/actions/workflows/build-android.yml/dispatches", body.toString())
-        return WorkflowRun(id = -1L, status = "queued", conclusion = null, htmlUrl = null)
+        val response = request(
+            "POST",
+            "/repos/${request.owner}/${request.repository}/actions/workflows/build-android.yml/dispatches",
+            body.toString(),
+            expected = setOf(200, 204)
+        )
+        if (response.isEmpty()) return WorkflowRun(id = -1L, status = "queued", conclusion = null, htmlUrl = null)
+        val json = JSONObject(String(response, StandardCharsets.UTF_8))
+        return WorkflowRun(
+            id = json.optLong("workflow_run_id", -1L),
+            status = "queued",
+            conclusion = null,
+            htmlUrl = json.optString("html_url").ifBlank { null }
+        )
     }
 
     fun dispatchAndResolveBuild(request: BuildRequest, timeoutMillis: Long = 60_000): WorkflowRun {
+        val dispatched = dispatchBuild(request)
+        if (dispatched.id > 0) return dispatched
+
         val knownIds = listWorkflowRuns(request.owner, request.repository).map { it.id }.toSet()
-        dispatchBuild(request)
         val deadline = System.currentTimeMillis() + timeoutMillis
         while (System.currentTimeMillis() < deadline) {
             val candidate = listWorkflowRuns(request.owner, request.repository)
@@ -141,7 +253,12 @@ class GitHubActionsClient(
                         id = run.getLong("id"),
                         status = run.optString("status"),
                         conclusion = run.optString("conclusion").ifBlank { null },
-                        htmlUrl = run.optString("html_url").ifBlank { null }
+                        htmlUrl = run.optString("html_url").ifBlank { null },
+                        headSha = run.optString("head_sha").ifBlank { null },
+                        runNumber = run.optInt("run_number").takeUnless { it == 0 },
+                        runAttempt = run.optInt("run_attempt").takeUnless { it == 0 },
+                        createdAt = run.optString("created_at").ifBlank { null },
+                        updatedAt = run.optString("updated_at").ifBlank { null }
                     )
                 )
             }
@@ -157,12 +274,61 @@ class GitHubActionsClient(
                 id = runId,
                 status = status,
                 conclusion = json.optString("conclusion").ifBlank { null },
-                htmlUrl = json.optString("html_url").ifBlank { null }
+                htmlUrl = json.optString("html_url").ifBlank { null },
+                headSha = json.optString("head_sha").ifBlank { null },
+                runNumber = json.optInt("run_number").takeUnless { it == 0 },
+                runAttempt = json.optInt("run_attempt").takeUnless { it == 0 },
+                createdAt = json.optString("created_at").ifBlank { null },
+                updatedAt = json.optString("updated_at").ifBlank { null }
             )
             if (status == "completed") return result
             Thread.sleep(pollMillis)
         }
     }
+
+    fun listJobs(owner: String, repository: String, runId: Long): List<WorkflowJob> {
+        val json = JSONObject(String(
+            request("GET", "/repos/$owner/$repository/actions/runs/$runId/jobs?per_page=100"),
+            StandardCharsets.UTF_8
+        ))
+        val jobs = json.optJSONArray("jobs") ?: JSONArray()
+        return buildList {
+            for (index in 0 until jobs.length()) {
+                val job = jobs.getJSONObject(index)
+                add(
+                    WorkflowJob(
+                        id = job.getLong("id"),
+                        name = job.optString("name"),
+                        status = job.optString("status"),
+                        conclusion = job.optString("conclusion").ifBlank { null },
+                        htmlUrl = job.optString("html_url").ifBlank { null }
+                    )
+                )
+            }
+        }
+    }
+
+    fun downloadJobLog(owner: String, repository: String, jobId: Long, destination: File): File {
+        destination.parentFile?.mkdirs()
+        val log = request("GET", "/repos/$owner/$repository/actions/jobs/$jobId/logs")
+        FileOutputStream(destination).use { it.write(log) }
+        return destination
+    }
+
+    fun cancelRun(owner: String, repository: String, runId: Long) {
+        request("POST", "/repos/$owner/$repository/actions/runs/$runId/cancel", expected = setOf(202))
+    }
+
+    fun rerunFailedJobs(owner: String, repository: String, runId: Long) {
+        request("POST", "/repos/$owner/$repository/actions/runs/$runId/rerun-failed-jobs", expected = setOf(201))
+    }
+
+    fun deleteArtifact(owner: String, repository: String, artifactId: Long) {
+        request("DELETE", "/repos/$owner/$repository/actions/artifacts/$artifactId", expected = setOf(204))
+    }
+
+    fun getRepositoryMetadata(owner: String, repository: String): JSONObject =
+        JSONObject(String(request("GET", "/repos/$owner/$repository"), StandardCharsets.UTF_8))
 
     fun listArtifacts(owner: String, repository: String, runId: Long): List<BuildArtifact> {
         val json = JSONObject(String(request("GET", "/repos/$owner/$repository/actions/runs/$runId/artifacts"), StandardCharsets.UTF_8))

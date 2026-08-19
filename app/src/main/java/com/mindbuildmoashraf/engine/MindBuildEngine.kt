@@ -17,7 +17,7 @@ class MindBuildEngine(
         }
 
         onProgress("Uploading Kotlin project tree")
-        github.uploadProjectSnapshot(snapshot, request.owner, request.repository, request.branch)
+        github.uploadProjectSnapshotAtomic(snapshot, request.owner, request.repository, request.branch)
 
         if (request.buildType == BuildType.RELEASE) {
             onProgress("Encrypting and uploading release signing material")

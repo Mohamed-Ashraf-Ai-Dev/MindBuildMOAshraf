@@ -196,6 +196,10 @@ export RELEASE_KEY_PASSWORD='...'
 
 التصميم الحالي يفصل بين **مفتاح GitHub API** و**مفتاح توقيع Android**. الأول محفوظ في Android Keystore ويستعمل لإدارة المستودع، والثاني يُرسل مشفرًا إلى GitHub Actions Secrets ويستعمل فقط أثناء Release. لا ينبغي أن يمتلك أي جزء من واجهة المستخدم قيمة التوقيع أو كلمات المرور أكثر من الزمن اللازم.
 
+## دليل GitHub API الكامل
+
+التفاصيل التشغيلية الكاملة للتوكن، والصلاحيات، وREST endpoints، وأجسام الطلبات، ورفع المشروع الذري، وإدارة Secrets، ومتابعة الوظائف والسجلات، وتنزيل artifacts، وحالات الخطأ موجودة في [docs/GITHUB-INTEGRATION.md](docs/GITHUB-INTEGRATION.md).
+
 ## مراجع
 
 1. [GitHub REST API: Actions Secrets](https://docs.github.com/en/rest/actions/secrets)

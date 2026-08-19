@@ -13,8 +13,21 @@ data class ProjectSnapshot(
 ) {
     init {
         require(files.isNotEmpty()) { "Project snapshot cannot be empty" }
-        require(files.none { it.path.startsWith("/") || it.path.contains("..") }) {
-            "Project paths must be relative and must not escape the repository"
+        require(files.none {
+            val normalized = it.path.replace('\\', '/').lowercase()
+            normalized.startsWith("/") ||
+                normalized.contains("../") ||
+                normalized == ".git" ||
+                normalized.startsWith(".git/") ||
+                normalized.endsWith(".jks") ||
+                normalized.endsWith(".keystore") ||
+                normalized.endsWith(".p12") ||
+                normalized.endsWith(".pfx") ||
+                normalized.endsWith(".pem") ||
+                normalized.endsWith("local.properties") ||
+                normalized.endsWith("release-signing.env")
+        }) {
+            "Project contains an unsafe path or signing material"
         }
     }
 }
@@ -35,6 +48,19 @@ data class BuildRequest(
 
 data class WorkflowRun(
     val id: Long,
+    val status: String,
+    val conclusion: String?,
+    val htmlUrl: String?,
+    val headSha: String? = null,
+    val runNumber: Int? = null,
+    val runAttempt: Int? = null,
+    val createdAt: String? = null,
+    val updatedAt: String? = null
+)
+
+data class WorkflowJob(
+    val id: Long,
+    val name: String,
     val status: String,
     val conclusion: String?,
     val htmlUrl: String?
@@ -59,4 +85,12 @@ data class ReleaseSigningMaterial(
     val keyAlias: String,
     val keyPassword: String,
     val format: String = "JKS"
-)
+) {
+    init {
+        require(format.uppercase() in setOf("JKS", "PKCS12")) { "Signing format must be JKS or PKCS12" }
+        require(keystoreFile.isFile && keystoreFile.length() > 0) { "Signing keystore must be a non-empty file" }
+        require(storePassword.isNotBlank()) { "Store password cannot be blank" }
+        require(keyAlias.isNotBlank()) { "Key alias cannot be blank" }
+        require(keyPassword.isNotBlank()) { "Key password cannot be blank" }
+    }
+}
