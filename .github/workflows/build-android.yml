@@ -49,7 +49,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
-      RELEASE_STORE_FILE: ${{ runner.temp }}/release-signing.jks
+      RELEASE_STORE_FILE: /tmp/mindbuild-release-signing.jks
       RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
       RELEASE_STORE_TYPE: ${{ secrets.RELEASE_STORE_TYPE || 'JKS' }}
       RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
