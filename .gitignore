@@ -1,0 +1,24 @@
+.gradle/
+.kotlin/
+/local.properties
+/.idea/
+*.iml
+/build/
+/captures/
+.externalNativeBuild/
+.cxx/
+app/build/
+
+# Never commit signing material or secret exports.
+*.jks
+*.keystore
+*.p12
+*.pfx
+*.pem
+.mindbuild-signing/
+release-signing.env
+RELEASE_KEYSTORE_B64.txt
+
+# CI output
+/dist/
+/signing-material/
