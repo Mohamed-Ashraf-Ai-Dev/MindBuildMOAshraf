@@ -62,7 +62,13 @@ APK/AAB + SHA256SUMS.txt
 
 في Release، يضيف التطبيق خطوة اختيارية قبل تشغيل البناء. يقرأ مفتاح JKS/PKCS12 من Storage Access Framework، ثم يرسل قيمة Base64 المشفّرة إلى GitHub Actions Secrets. التشفير يتم بـ Libsodium sealed box باستخدام public key الخاص بالمستودع، ولا تُرسل كلمة المرور الخام إلى GitHub API.
 
-## دمج التوكن بأمان
+## وضع الهاتف الشخصي وتوكن GitHub القوي
+
+بما أن التطبيق سيعمل على هاتفك أنت فقط ولن تخرجه للمستخدمين، استخدم توكنًا مخصصًا لمستودع `MindBuildMOAshraf` بصلاحيات كاملة على هذا المستودع فقط. لا تحتاج إلى GitHub App أو خادم وسيط في هذا السيناريو.
+
+إعداد Fine-grained PAT الكامل للمحرك هو: `Contents: Read and write`، و`Actions: Read and write`، و`Workflows: Read and write`، و`Metadata: Read-only`. هذا يغطي رفع شجرة المشروع، تعديل موارد وأيقونات التطبيق، تعديل workflow عند الحاجة، تشغيل كل أنواع البناء، قراءة الوظائف والسجلات، تنزيل وحذف artifacts، ورفع مفاتيح Release إلى Actions Secrets. لا تضف صلاحيات Organization أو Administration أو Issues أو Pull requests ما دمت لا تستعمل هذه الوظائف.
+
+يمكنك جعل التوكن طويل الصلاحية أو بدون انتهاء إذا كان حسابك الشخصي ومخزنًا داخل هاتفك فقط، لكن لا تضعه داخل APK ثابت أو Git. إذا انكشف الهاتف أو ملف APK، ألغِ التوكن فورًا من GitHub وأنشئ آخر.
 
 لا تضع توكن GitHub في `BuildConfig` أو `SharedPreferences` النصية أو ملفات المشروع. استخدم `SecureGitHubTokenStore`، الذي يخزن التوكن مشفرًا بمفتاح محفوظ داخل Android Keystore:
 
@@ -78,7 +84,16 @@ val github = GitHubActionsClient(
 )
 ```
 
-يجب تنفيذ جميع استدعاءات الشبكة في `Dispatchers.IO` أو في Worker مناسب. لا تعرض التوكن أو قيم Secrets في Logcat، ولا تُضمّنه في commit أو artifact.
+يجب تنفيذ جميع استدعاءات الشبكة في `Dispatchers.IO` أو في Worker مناسب. لا تعرض التوكن أو قيم Secrets في Logcat، ولا تُضمّنه في commit أو artifact. في وضعك الشخصي، يمكن إبقاء جلسة التوكن محفوظة على الهاتف، مع زر واضح `مسح التوكن` وزر `اختبار الاتصال` يعرض اسم المستودع والصلاحيات العامة فقط دون قيمة التوكن:
+
+```kotlin
+withContext(Dispatchers.IO) {
+    github.validatePersonalAccess(
+        owner = "Mohamed-Ashraf-Ai-Dev",
+        repository = "MindBuildMOAshraf"
+    )
+}
+```
 
 ## رفع مشروع Kotlin وتشغيل البناء
 

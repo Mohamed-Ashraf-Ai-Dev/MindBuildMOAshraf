@@ -327,8 +327,23 @@ class GitHubActionsClient(
         request("DELETE", "/repos/$owner/$repository/actions/artifacts/$artifactId", expected = setOf(204))
     }
 
+    fun getAuthenticatedUser(): JSONObject =
+        JSONObject(String(request("GET", "/user"), StandardCharsets.UTF_8))
+
     fun getRepositoryMetadata(owner: String, repository: String): JSONObject =
         JSONObject(String(request("GET", "/repos/$owner/$repository"), StandardCharsets.UTF_8))
+
+    fun validatePersonalAccess(owner: String, repository: String): JSONObject {
+        getAuthenticatedUser()
+        val metadata = getRepositoryMetadata(owner, repository)
+        check(!metadata.optBoolean("archived")) { "Repository is archived" }
+        check(!metadata.optBoolean("disabled")) { "Repository is disabled" }
+        val permissions = metadata.optJSONObject("permissions")
+        check(permissions == null || permissions.optBoolean("pull", false)) {
+            "Token cannot read this repository"
+        }
+        return metadata
+    }
 
     fun listArtifacts(owner: String, repository: String, runId: Long): List<BuildArtifact> {
         val json = JSONObject(String(request("GET", "/repos/$owner/$repository/actions/runs/$runId/artifacts"), StandardCharsets.UTF_8))

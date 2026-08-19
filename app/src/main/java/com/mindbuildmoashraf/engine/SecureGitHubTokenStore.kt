@@ -28,8 +28,9 @@ class SecureGitHubTokenStore(context: Context) {
     }
 
     fun saveToken(token: String) {
-        require(token.startsWith("ghp_") || token.startsWith("github_pat_")) {
-            "Expected a GitHub classic or fine-grained token"
+        val acceptedPrefixes = listOf("ghp_", "github_pat_", "gho_", "ghs_", "ghu_", "ghr_")
+        require(acceptedPrefixes.any(token::startsWith)) {
+            "Expected a GitHub classic, fine-grained, OAuth, installation, or refresh token"
         }
         val cipher = Cipher.getInstance(transformation).apply { init(Cipher.ENCRYPT_MODE, getOrCreateKey()) }
         val ciphertext = cipher.doFinal(token.toByteArray(StandardCharsets.UTF_8))

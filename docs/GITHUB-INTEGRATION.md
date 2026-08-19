@@ -33,9 +33,11 @@ https://github.com/Mohamed-Ashraf-Ai-Dev/MindBuildMOAshraf
 
 تطبيق AIDE يحتفظ بشجرة الملفات كاملة. أي ملف مثل `AndroidManifest.xml` أو `mipmap-*` أو `drawable-*` أو `assets` أو Kotlin أو XML أو Gradle يرفع كجزء من المشروع.
 
-## 2. نوع التوكن الموصى به
+## 2. نوع التوكن الموصى به لوضع الهاتف الشخصي
 
-استخدم **Fine-grained Personal Access Token** مخصصًا لهذا المستودع فقط، مع تاريخ انتهاء، وليس Personal Access Token كلاسيكيًا واسع الصلاحيات. للوصول إلى مستودع Private، اختر هذا المستودع صراحةً في `Repository access`.
+بما أن التطبيق سيبقى على هاتفك ولن يخرج لمستخدمين آخرين، استخدم **Fine-grained Personal Access Token قويًا مخصصًا لمستودع MindBuildMOAshraf فقط**. لا تحتاج إلى GitHub App أو خادم وسيط في هذا السيناريو؛ التطبيق يتصل مباشرة بـ GitHub عبر HTTPS.
+
+يمكنك اختيار مدة طويلة أو `No expiration` إذا كان هذا حسابك الشخصي والهاتف تحت سيطرتك، لكن لا تجعل التوكن جزءًا من APK أو مستودع Git. في حالة فقد الهاتف أو الاشتباه في التسريب، ألغِ التوكن من GitHub فورًا وأنشئ واحدًا جديدًا.
 
 الإعداد القوي الذي يغطي وظائف المحرك الحالية هو:
 
@@ -52,9 +54,9 @@ https://github.com/Mohamed-Ashraf-Ai-Dev/MindBuildMOAshraf
 
 ### إنشاء التوكن
 
-من GitHub افتح `Settings → Developer settings → Fine-grained personal access tokens → Generate new token`. اختر اسمًا واضحًا مثل `MindBuild-AIDE-Android`، وحدد مدة انتهاء قصيرة أو متوسطة، واختر المستودع فقط، ثم فعّل الجدول السابق. انسخ التوكن مرة واحدة إلى حقل آمن في التطبيق؛ لن يعرضه التطبيق مرة أخرى.
+من GitHub افتح `Settings → Developer settings → Fine-grained personal access tokens → Generate new token`. استخدم اسمًا مثل `MindBuild-AIDE-Personal`، واختر `Only select repositories` ثم `MindBuildMOAshraf`، وفَعّل `Contents: Read and write` و`Actions: Read and write` و`Workflows: Read and write` و`Metadata: Read-only`. هذا الملف يعطي التطبيق كل وظائف البناء الحالية من دون صلاحيات إدارة حساب GitHub أو مستودعات أخرى.
 
-للاستخدام الإنتاجي متعدد المستخدمين، الأفضل استبدال PAT بـ **GitHub App** مثبت على المستودع؛ عندها يحصل كل مستخدم على Installation Token قصير العمر، وتقل خطورة تخزين توكن دائم. أما PAT فهو مناسب لنسخة شخصية أو MVP مرتبطة بحساب مالك المشروع.
+احفظ التوكن في التطبيق من خلال `SecureGitHubTokenStore`، وأضف في الواجهة زري `اختبار الاتصال` و`مسح التوكن`. لا تعرض القيمة نفسها بعد الحفظ. خيار GitHub App يظل مناسبًا فقط إذا تحوّل المشروع مستقبلًا إلى تطبيق متعدد المستخدمين؛ ليس مطلوبًا لوضعك الشخصي.
 
 ## 3. رؤوس كل طلب API
 
