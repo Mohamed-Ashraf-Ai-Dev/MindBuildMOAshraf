@@ -399,6 +399,92 @@ DELETE /repos/{owner}/{repo}/releases/{release_id}
 
 لا تستخدم PAT كلاسيكيًا مع `repo` إذا كان Fine-grained PAT كافيًا. لا تضع التوكن داخل URL أو query string. لا تكتب كلمات المرور في `GITHUB_OUTPUT` أو logs. لا تستخدم `force push` من التطبيق. لا تشغل Release بالمفتاح المؤقت. لا تسمح لملفات المشروع بتعديل workflow الإنتاجي دون مراجعة أو branch حماية، لأن workflow يمكنه تنفيذ أوامر على runner.
 
+## 13. Toolchain والحزم والإصدارات
+
+هذه هي بيئة البناء المثبتة داخل المستودع، ولا تعتمد على نسخة عشوائية من Gradle على الهاتف أو runner:
+
+| العنصر | الإصدار أو النوع | مكان الإعداد |
+|---|---|---|
+| Gradle Wrapper | `8.9` | `gradle/wrapper/gradle-wrapper.properties` |
+| ملفات Gradle | Kotlin DSL: `build.gradle.kts` و`settings.gradle.kts` | جذر المشروع ووحدة `app` |
+| Android Gradle Plugin | `8.7.3` | `gradle/libs.versions.toml` |
+| Kotlin | `2.0.21` | `gradle/libs.versions.toml` |
+| Java في GitHub Actions | JDK `17` Temurin | workflow `actions/setup-java` |
+| compileSdk | Android API `35` | `app/build.gradle.kts` |
+| targetSdk | Android API `35` | `app/build.gradle.kts` |
+| minSdk | Android API `24` | `app/build.gradle.kts` |
+| Android Build Tools | `35.0.0` | workflow `sdkmanager` |
+| Version Catalog | `gradle/libs.versions.toml` | جميع أسماء الحزم والإصدارات |
+
+### حزم Android وواجهة التطبيق
+
+| الحزمة | الإصدار | الاستخدام |
+|---|---:|---|
+| `androidx.core:core-ktx` | `1.15.0` | امتدادات Android الأساسية لـ Kotlin |
+| `androidx.appcompat:appcompat` | `1.7.0` | Activity وواجهة Android المتوافقة |
+| `com.google.android.material:material` | `1.12.0` | Material Design وMaterial3 |
+| `androidx.activity:activity-ktx` | `1.10.0` | إدارة Activity باستخدام Kotlin |
+| `androidx.constraintlayout:constraintlayout` | `2.2.0` | تخطيط XML المرن |
+
+التطبيق النموذجي يستخدم XML Views وAppCompat وMaterial. المحرك نفسه يقبل مشاريع Kotlin Android تستخدم XML أو Jetpack Compose أو أي موارد Android طبيعية؛ المشروع الذي يرفعه التطبيق هو الذي يحدد واجهة التطبيق النهائية.
+
+### حزم الاختبار
+
+| الحزمة | الإصدار |
+|---|---:|
+| `junit:junit` | `4.13.2` |
+| `androidx.test.ext:junit` | `1.2.1` |
+| `androidx.test.espresso:espresso-core` | `3.6.1` |
+
+### حزم التشفير والاتصال
+
+| الحزمة أو النظام | الإصدار | الاستخدام |
+|---|---:|---|
+| `com.goterl:lazysodium-android` | `5.2.0` | Libsodium sealed-box لتشفير GitHub Secrets |
+| `net.java.dev.jna:jna` | `5.19.1` | Native dependency المطلوبة لـ Lazysodium Android |
+| Android Keystore | مدمج في Android | حماية توكن GitHub محليًا باستخدام AES-GCM |
+| `HttpURLConnection` | مدمج في Android | REST API عبر HTTPS بدون SDK خارجي |
+
+### ملفات Gradle المهمة
+
+```text
+settings.gradle.kts          # اسم المشروع والوحدات والمستودعات
+build.gradle.kts             # إضافات Gradle العامة
+app/build.gradle.kts         # Android والتوقيع والاعتمادات
+gradle/libs.versions.toml    # كل الحزم والإصدارات
+gradle.properties            # الذاكرة وAndroidX وKotlin
+gradlew                      # Gradle Wrapper لأنظمة Linux/macOS
+gradlew.bat                  # Gradle Wrapper لنظام Windows
+```
+
+### أوامر البناء المحلية
+
+```bash
+# Debug APK
+./gradlew :app:assembleDebug
+
+# Release APK، يحتاج متغيرات التوقيع
+./gradlew :app:assembleRelease
+
+# Release AAB، يحتاج متغيرات التوقيع
+./gradlew :app:bundleRelease
+
+# APK وAAB معًا
+./gradlew :app:assembleRelease :app:bundleRelease
+```
+
+متغيرات توقيع Release هي:
+
+```text
+RELEASE_STORE_FILE
+RELEASE_STORE_PASSWORD
+RELEASE_STORE_TYPE=JKS أو PKCS12
+RELEASE_KEY_ALIAS
+RELEASE_KEY_PASSWORD
+```
+
+يتم تثبيت البيئة نفسها في GitHub Actions قبل تشغيل `./gradlew`، ثم تُفحص APK بواسطة `apksigner` وAAB بواسطة `jarsigner`، ويُنشأ `SHA256SUMS.txt` لكل مخرج.
+
 ## المراجع الرسمية
 
 [1]: https://docs.github.com/en/rest/authentication/permissions-required-for-fine-grained-personal-access-tokens "GitHub fine-grained token permissions"
