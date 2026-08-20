@@ -14,5 +14,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "MindBuildMOAshraf"
+rootProject.name = "تطبيقي الجديد"
 include(":app")

@@ -3,116 +3,58 @@ plugins {
     alias(libs.plugins.kotlin.android)
 }
 
-private fun envOrProperty(name: String): String? =
-    providers.environmentVariable(name).orNull
-        ?: providers.gradleProperty(name).orNull
+val releaseStoreFile = providers.environmentVariable("RELEASE_STORE_FILE")
+val releaseStorePassword = providers.environmentVariable("RELEASE_STORE_PASSWORD")
+val releaseStoreType = providers.environmentVariable("RELEASE_STORE_TYPE")
+val releaseKeyAlias = providers.environmentVariable("RELEASE_KEY_ALIAS")
+val releaseKeyPassword = providers.environmentVariable("RELEASE_KEY_PASSWORD")
 
 android {
-    namespace = "com.mindbuildmoashraf.app"
+    namespace = "com.example.mindbuildapp"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.mindbuildmoashraf.app"
+        applicationId = "com.example.mindbuildapp"
         minSdk = 24
         targetSdk = 35
-        versionCode = (envOrProperty("VERSION_CODE")?.takeUnless { it.isBlank() } ?: "1").toInt()
-        versionName = envOrProperty("VERSION_NAME")?.takeUnless { it.isBlank() } ?: "1.0.0"
-        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        vectorDrawables.useSupportLibrary = true
+        versionCode = 1
+        versionName = "1.0.0"
+    }
+
+    signingConfigs {
+        create("release") {
+            if (releaseStoreFile.isPresent) {
+                storeFile = file(releaseStoreFile.get())
+                storePassword = releaseStorePassword.orNull
+                storeType = releaseStoreType.orNull ?: "JKS"
+                keyAlias = releaseKeyAlias.orNull
+                keyPassword = releaseKeyPassword.orNull
+            }
+        }
     }
 
     buildTypes {
-        debug {
+        getByName("debug") {
             applicationIdSuffix = ".debug"
             versionNameSuffix = "-debug"
-            // Debug remains independently signed by the Android debug keystore.
-            signingConfig = signingConfigs.getByName("debug")
         }
-
-        release {
+        getByName("release") {
             isMinifyEnabled = false
-            isShrinkResources = false
-            proguardFiles(
-                getDefaultProguardFile("proguard-android-optimize.txt"),
-                "proguard-rules.pro"
-            )
-
-            val releaseTaskRequested = gradle.startParameter.taskNames.any { taskName ->
-                taskName.contains("release", ignoreCase = true) ||
-                    taskName.contains("bundle", ignoreCase = true)
-            }
-            if (releaseTaskRequested) {
-                val releaseStoreFile = envOrProperty("RELEASE_STORE_FILE")
-                val releaseStorePassword = envOrProperty("RELEASE_STORE_PASSWORD")
-                val releaseKeyAlias = envOrProperty("RELEASE_KEY_ALIAS")
-                val releaseKeyPassword = envOrProperty("RELEASE_KEY_PASSWORD")
-                val releaseStoreType = envOrProperty("RELEASE_STORE_TYPE")?.takeUnless { it.isBlank() } ?: "JKS"
-
-                check(!releaseStoreFile.isNullOrBlank()) {
-                    "Release signing is required. Set RELEASE_STORE_FILE or -PRELEASE_STORE_FILE."
-                }
-                check(!releaseStorePassword.isNullOrBlank()) {
-                    "Release signing is required. Set RELEASE_STORE_PASSWORD or -PRELEASE_STORE_PASSWORD."
-                }
-                check(!releaseKeyAlias.isNullOrBlank()) {
-                    "Release signing is required. Set RELEASE_KEY_ALIAS or -PRELEASE_KEY_ALIAS."
-                }
-                check(!releaseKeyPassword.isNullOrBlank()) {
-                    "Release signing is required. Set RELEASE_KEY_PASSWORD or -PRELEASE_KEY_PASSWORD."
-                }
-
-                signingConfig = signingConfigs.create("releaseFromEnvironment").apply {
-                    storeFile = file(releaseStoreFile)
-                    storeType = releaseStoreType
-                    storePassword = releaseStorePassword
-                    keyAlias = releaseKeyAlias
-                    keyPassword = releaseKeyPassword
-                    enableV1Signing = true
-                    enableV2Signing = true
-                    enableV3Signing = true
-                    enableV4Signing = true
-                }
-            }
+            signingConfig = signingConfigs.getByName("release")
         }
-    }
-
-    buildFeatures {
-        buildConfig = true
-    }
-
-    packaging {
-        resources.excludes += "/META-INF/{AL2.0,LGPL2.1}"
     }
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-
-    kotlinOptions {
-        jvmTarget = "17"
-    }
-
-    lint {
-        abortOnError = true
-        checkReleaseBuilds = true
-    }
+    kotlinOptions { jvmTarget = "17" }
 }
 
 dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
     implementation(libs.material)
-    implementation(libs.androidx.activity)
+    implementation(libs.androidx.activity.ktx)
     implementation(libs.androidx.constraintlayout)
-
-    testImplementation(libs.junit)
-    androidTestImplementation(libs.androidx.junit)
-    androidTestImplementation(libs.androidx.espresso.core)
-
-    implementation(libs.lazysodium.android)
-    implementation(libs.jna)
 }
-
-// The CI collector discovers all APK/AAB files under app/build/outputs, so the
-// engine remains compatible with standard Android Gradle Plugin output naming.
