@@ -47,6 +47,7 @@ export default function Home() {
   const [dirty, setDirty] = useState(false);
   const [iconPreview, setIconPreview] = useState<string | null>(null);
   const [token, setToken] = useState("");
+  const [tokenLoaded, setTokenLoaded] = useState(false);
   const [owner, setOwner] = useState("Mohamed-Ashraf-Ai-Dev");
   const [repo, setRepo] = useState("MindBuildMOAshraf");
   const [branch, setBranch] = useState("main");
@@ -74,6 +75,19 @@ export default function Home() {
   useEffect(() => {
     if (!projectFiles.some((file) => file.path === activePath)) setActivePath(projectFiles[0]?.path || "");
   }, [projectFiles, activePath]);
+
+  useEffect(() => {
+    try { setToken(window.localStorage.getItem("mindbuild.github.token") || ""); }
+    finally { setTokenLoaded(true); }
+  }, []);
+
+  useEffect(() => {
+    if (!tokenLoaded) return;
+    try {
+      if (token.trim()) window.localStorage.setItem("mindbuild.github.token", token.trim());
+      else window.localStorage.removeItem("mindbuild.github.token");
+    } catch { /* The current browser may block local storage. */ }
+  }, [token, tokenLoaded]);
 
   useEffect(() => {
     if (!run || run.status === "completed" || !token.trim()) return;
