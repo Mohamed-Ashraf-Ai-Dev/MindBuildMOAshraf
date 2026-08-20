@@ -24,16 +24,25 @@ export class GitHubClient {
   constructor(private readonly config: GitHubConfig) {}
 
   private async request<T>(path: string, init: RequestInit = {}): Promise<T> {
+    const token = this.config.token.trim();
+    if (!/^(github_pat_|ghp_)[A-Za-z0-9_]+$/.test(token)) {
+      throw new Error("صيغة GitHub Token غير صحيحة. الصق Fine-grained Token يبدأ بـ github_pat_ أو Classic Token يبدأ بـ ghp_، وتأكد من حذف أي مسافة قبل أو بعد التوكن.");
+    }
     const headers = new Headers(init.headers);
     headers.set("Accept", "application/vnd.github+json");
-    headers.set("Authorization", `Bearer ${this.config.token.trim()}`);
+    headers.set("Authorization", `Bearer ${token}`);
     headers.set("X-GitHub-Api-Version", "2026-03-10");
     headers.set("User-Agent", "MindBuild-Studio-Pages");
     if (init.body) headers.set("Content-Type", "application/json");
     const response = await fetch(`${API}${path}`, { ...init, headers });
     if (!response.ok) {
       const body = await response.text();
-      throw new Error(`GitHub ${response.status}: ${body.slice(0, 240)}`);
+      let message = "";
+      try { message = (JSON.parse(body) as { message?: string }).message || ""; } catch { message = body; }
+      if (response.status === 401) throw new Error("GitHub رفض التوكن (401). أنشئ توكنًا جديدًا أو الصقه كاملًا، وتأكد أنه غير منتهي أو ملغى. لا تكتب اسم التوكن أو كلمة المرور؛ الصق القيمة التي تبدأ بـ github_pat_.");
+      if (response.status === 403) throw new Error("التوكن صحيح لكنه لا يملك الصلاحيات المطلوبة (403). فعّل Contents: Read and write وActions: Read and write وWorkflows: Read and write لهذا المستودع.");
+      if (response.status === 404) throw new Error("لم أجد المستودع أو workflow المطلوب (404). راجع Owner وRepository وBranch، وتأكد أن التوكن يستطيع الوصول إلى المستودع.");
+      throw new Error(`تعذر الاتصال بـ GitHub (${response.status})${message ? `: ${message}` : ""}`);
     }
     if (response.status === 204) return undefined as T;
     return response.json() as Promise<T>;
